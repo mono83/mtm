@@ -16,7 +16,7 @@ var flagRefresh time.Duration
 var serveCmd = &cobra.Command{
 	Use:     "serve",
 	Aliases: []string{"server"},
-	Short:   "Runs server",
+	Short:   "Runs server. InfluxDB and/or Prometheus configuration must be provided",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(flagInfluxDBAddr) == 0 && len(flagPrometheusBind) == 0 {
 			return errors.New("both influxdb and prometheus setting are missing")
