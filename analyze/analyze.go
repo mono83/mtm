@@ -10,25 +10,29 @@ import (
 
 // MySQL performs database server health analysis using connection
 // built on given configuration
-func MySQL(c mysql.Config) (values.MetricCollection, error) {
-	return MySQLDSN(c.FormatDSN())
+func MySQL(c mysql.Config, filter func(db string) bool) (values.MetricCollection, error) {
+	return MySQLDSN(c.FormatDSN(), filter)
 }
 
 // MySQLDSN performs database server health analysis using connection
 // built on given DSN
-func MySQLDSN(dsn string) (values.MetricCollection, error) {
+func MySQLDSN(dsn string, filter func(db string) bool) (values.MetricCollection, error) {
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
 		return nil, err
 	}
 
-	return Analyze(db)
+	return Analyze(db, filter)
 }
 
 // Analyze performs database server health analysis using given connection
-func Analyze(conn *sql.DB) (values.MetricCollection, error) {
+func Analyze(conn *sql.DB, filter func(db string) bool) (values.MetricCollection, error) {
 	if conn == nil {
 		return nil, errors.New("nil database connection")
+	}
+
+	if filter == nil {
+		filter = func(string) bool { return true }
 	}
 
 	dbs, err := listdb(conn)
@@ -38,6 +42,10 @@ func Analyze(conn *sql.DB) (values.MetricCollection, error) {
 	log.Printf("Got %d databases\n", len(dbs))
 	var totalTables []table
 	for _, d := range dbs {
+		if !filter(d) {
+			log.Printf("Filtered database %s, skipping\n", d)
+			continue
+		}
 		log.Printf("Entering database %s\n", d)
 		tables, err := listtables(conn, d)
 		if err != nil {

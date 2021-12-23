@@ -11,6 +11,8 @@ var (
 	flagInfluxDBAddr          string
 	flagInfluxPacketSizeLimit int
 	flagPrometheusBind        string
+	flagFilterOnly            []string
+	flagFilterExclude         []string
 )
 
 // MainCmd is main cobra command
@@ -21,6 +23,8 @@ var MainCmd = &cobra.Command{
 
 func genericInject(c *cobra.Command, influx, prometheus bool) {
 	c.Flags().StringVar(&flagMySQLDSN, "mysql", "root:root@tcp(127.0.0.1:3306)/", "MySQL DSN")
+	c.Flags().StringSliceVar(&flagFilterOnly, "only", nil, "White list databases")
+	c.Flags().StringSliceVar(&flagFilterExclude, "exclude", nil, "Black list databases")
 	if influx {
 		c.Flags().StringVar(&flagInfluxDBAddr, "influxdb", "", "InfluxDB UDP listening port")
 		c.Flags().IntVar(&flagInfluxPacketSizeLimit, "packet", 1024, "Max UDP packet size limit")
@@ -31,8 +35,32 @@ func genericInject(c *cobra.Command, influx, prometheus bool) {
 }
 
 func genericReader() func() (values.MetricCollection, error) {
+	allow := make(map[string]bool)
+	deny := make(map[string]bool)
+
+	for _, f := range flagFilterOnly {
+		allow[f] = true
+	}
+	for _, f := range flagFilterExclude {
+		deny[f] = true
+	}
+
 	return func() (values.MetricCollection, error) {
-		return analyze.MySQLDSN(flagMySQLDSN)
+		return analyze.MySQLDSN(flagMySQLDSN, func(db string) bool {
+			if len(deny) > 0 {
+				if _, ok := deny[db]; ok {
+					// Matched in blacklist
+					return false
+				}
+			}
+			if len(allow) > 0 {
+				if _, ok := allow[db]; ok {
+					return true
+				}
+				return false
+			}
+			return true
+		})
 	}
 }
 
